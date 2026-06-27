@@ -1,0 +1,57 @@
+version: 2
+
+models:
+  - name: omop_person
+    description: "OMOP-CDM PERSON — patients dédoublonnés mappés au modèle standard."
+    columns:
+      - name: person_id
+        tests: [unique, not_null]
+      - name: gender_concept_id
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [8507, 8532, 0]
+
+  - name: omop_procedure_occurrence
+    columns:
+      - name: procedure_occurrence_id
+        tests: [unique, not_null]
+      - name: person_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('omop_person')
+                field: person_id
+
+  - name: omop_condition_occurrence
+    columns:
+      - name: condition_occurrence_id
+        tests: [unique, not_null]
+      - name: person_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('omop_person')
+                field: person_id
+
+  - name: omop_drug_exposure
+    columns:
+      - name: drug_exposure_id
+        tests: [unique, not_null]
+
+  - name: omop_death
+    columns:
+      - name: person_id
+        tests: [unique, not_null]
+  
+  - name: omop_measurement
+    columns:
+      - name: measurement_id
+        tests: [unique, not_null]
+      - name: person_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('omop_person')
+                field: person_id

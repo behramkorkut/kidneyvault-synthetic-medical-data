@@ -52,6 +52,7 @@ flowchart LR
     C -->|Pandera| B["Bronze<br/>Parquet (eCRF brut, défauts inclus)"]
     B --> Q["Qualité<br/>contrôles SQL + rappel/précision"]
     B -->|dbt staging| S["Silver<br/>dédoublonnage, exclusion, flags"]
+    S -->|dbt| OM["OMOP-CDM<br/>standardisation (seed Athena)"]
     S -->|dbt gold| GD["Gold<br/>cohorte + KPI"]
     GD --> ST["Streamlit<br/>screening nominatif"]
     GD --> AG["Agent requêteur<br/>text-to-SQL (Claude)"]
@@ -66,12 +67,12 @@ flowchart LR
 | **Bronze** | Tables sources (défauts inclus), validées Pandera, Parquet | ✅ |
 | **Qualité** | Contrôles SQL/DuckDB + indicateurs + évaluation rappel/précision | ✅ |
 | **Silver** (dbt) | Dédoublonnage, exclusion des anomalies, flags de divergence | ✅ |
+| **OMOP-CDM** (dbt) | Standardisation vers le modèle commun (person, condition, procedure, drug, measurement, death) | ✅ |
 | **Gold** (dbt) | Cohorte d'analyse à plat + KPI agrégés | ✅ |
 | **Screening** | Application Streamlit d'extraction de cohortes | ✅ |
 | **Pilotage** | Couche de service Postgres + dashboard Metabase | ✅ |
 | **Agent requêteur** | Text-to-SQL en langage naturel (Claude), garde-fous testés | ✅ |
 | **Export eCRF** | Data Dictionary REDCap généré depuis les contrats Pandera | ✅ |
-| **OMOP-CDM** | Standardisation pour portabilité inter-institutions | 🔜 |
 | **Orchestration** | Dagster (assets, lineage, planification) | 🔜 |
 | **Agent extracteur** | Texte clinique libre → JSON validé Pandera | 🔜 |
 
@@ -104,6 +105,26 @@ de centre) ne sont pas évaluables ligne à ligne — un `null` isolé est licit
 et sont suivis par un **indicateur** dédié (complétude par centre), pas par un
 contrôle booléen. Le rappel de 100 % n'est pas une fin en soi : c'est un
 *harnais de mesure* qui détecte immédiatement toute régression d'un contrôle.
+
+### La standardisation OMOP-CDM
+
+La couche `dbt/models/omop/` mappe la Silver vers le **modèle commun OMOP-CDM**
+(OHDSI), le standard d'interopérabilité des EDS français : `person`,
+`condition_occurrence`, `procedure_occurrence`, `drug_exposure`, `measurement`,
+`death`. Chaque fait clinique porte la double colonne OMOP — `*_concept_id`
+(concept *standard*) et `*_source_value` (valeur d'origine préservée).
+
+Le cœur d'OMOP n'est pas la structure mais le **vocabulaire** : chaque valeur
+source est traduite en concept standard (SNOMED, RxNorm…). La correspondance est
+curée depuis [Athena](https://athena.ohdsi.org) et versionnée dans un **seed**
+(`source_to_concept_map`, à la manière de la table OMOP `SOURCE_TO_CONCEPT_MAP`)
+— ex. *Néphrectomie partielle* → `4304536`, *Sunitinib* → `1336539`. Ce qui n'a
+pas de concept standard (score R.E.N.A.L., grade ISUP) reste en `concept_id = 0`
+avec sa `value_as_number` et son `source_value` : la convention OMOP, pas un
+pis-aller. `race`/`ethnicity` sont à `0` — non collectées en France (interdit).
+
+> En production, on chargerait les vocabulaires Athena complets pour automatiser
+> et valider le mapping ; le seed curé couvre ici les quelques valeurs synthétiques.
 
 ### L'agent requêteur (text-to-SQL)
 
@@ -246,10 +267,13 @@ kidneyvault/
 ├── sql/
 │   ├── qualite/          # un contrôle de cohérence = un fichier SQL
 │   └── indicateurs/      # indicateurs agrégés (ex. complétude par centre)
-├── dbt/models/
-│   ├── staging/          # interfaces 1:1 sur la Bronze + tests de schéma
-│   ├── silver/           # dédoublonnage, exclusion, flags de divergence
-│   └── gold/             # cohorte d'analyse + KPI de pilotage
+├── dbt/
+│   ├── models/
+│   │   ├── staging/      # interfaces 1:1 sur la Bronze + tests de schéma
+│   │   ├── silver/       # dédoublonnage, exclusion, flags de divergence
+│   │   ├── omop/         # standardisation OMOP-CDM (person, condition…)
+│   │   └── gold/         # cohorte d'analyse + KPI de pilotage
+│   └── seeds/            # source_to_concept_map (mapping Athena curé)
 ├── app/
 │   ├── screening.py      # interface Streamlit d'extraction de cohortes
 │   └── pages/            # page « Requeteur IA » (text-to-SQL)
@@ -284,12 +308,13 @@ kidneyvault/
 1. **Agent extracteur** : compte-rendu clinique en texte libre → JSON structuré
    validé par les contrats Pandera (l'usage LLM le plus utile en data management
    clinique), avec exécution sur modèle auto-hébergé en infra HDS.
-2. Standardisation OMOP-CDM en Silver (portabilité inter-institutions)
+2. Mapping OMOP complet via les vocabulaires Athena chargés (concept mapping
+   automatisé et validé, au-delà du seed curé actuel).
 3. Orchestration Dagster (assets, lineage, planification des runs)
-4. Extension de la CI aux tests dbt et au lint SQL (sqlfluff)
+4. Extension de la CI au lint SQL (sqlfluff)
 
 ## Stack
 
-`uv` · `Polars` · `Faker` · `Pandera` · `DuckDB` · `dbt` · `Streamlit` ·
-`Postgres` · `Metabase` · `Docker` · `API Claude` · `REDCap` · `pytest` · `ruff` ·
-GitHub Actions
+`uv` · `Polars` · `Faker` · `Pandera` · `DuckDB` · `dbt` · `OMOP-CDM` ·
+`Streamlit` · `Postgres` · `Metabase` · `Docker` · `API Claude` · `REDCap` ·
+`pytest` · `ruff` · GitHub Actions

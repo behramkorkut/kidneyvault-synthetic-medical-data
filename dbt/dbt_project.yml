@@ -14,3 +14,5 @@ models:
       +materialized: table   # données nettoyées, persistées dans le .duckdb
     gold:
       +materialized: table   # datamarts prêts à consommer
+  omop:
+      +materialized: table

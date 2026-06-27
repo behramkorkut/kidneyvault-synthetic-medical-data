@@ -1,0 +1,12 @@
+source_value,domain_id,target_concept_id,target_concept_name,target_vocabulary_id
+Néphrectomie partielle,Procedure,4304536,Partial nephrectomy,SNOMED
+Néphrectomie totale,Procedure,4021108,Total nephrectomy,SNOMED
+Cellules claires,Condition,4110880,Clear cell carcinoma of kidney,SNOMED
+Papillaire,Condition,37116731,Papillary renal cell carcinoma,SNOMED
+Chromophobe,Condition,37116670,Chromophobe renal cell carcinoma,SNOMED
+Autre,Condition,0,Unmapped,None
+Sunitinib,Drug,1336539,sunitinib,RxNorm
+Nivolumab,Drug,45892628,nivolumab,RxNorm
+Pembrolizumab,Drug,45775965,pembrolizumab,RxNorm
+Cabozantinib,Drug,43012292,cabozantinib,RxNorm
+Axitinib,Drug,42709322,axitinib,RxNorm
