@@ -1,6 +1,7 @@
 # KidneyVault
 
-![CI](https://github.com/behramkorkut/kidneyvault/actions/workflows/ci.yml/badge.svg)
+[![Live demo](https://img.shields.io/badge/Démo_live-Streamlit-FF4B4B?logo=streamlit&logoColor=white)](https://kidneyvault-synthetic-medical-data-rwhxgvuxwbnw4tir7sd9dp.streamlit.app/)
+[![CI](https://github.com/behramkorkut/kidneyvault-synthetic-medical-data/actions/workflows/ci.yml/badge.svg)](https://github.com/behramkorkut/kidneyvault-synthetic-medical-data/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![Licence](https://img.shields.io/badge/données-100%25%20synthétiques-success)
 
@@ -14,6 +15,15 @@ transformations dbt (Medallion) → screening de cohortes et pilotage décisionn
 > ⚠️ **Toutes les données sont 100 % synthétiques.** ⚠️ Aucune donnée réelle de
 > patient n'est utilisée ni accessible. Le modèle s'inspire de structures
 > cliniques publiques à des fins pédagogiques et de démonstration.
+
+## 🚀 Démo live (sans installation)
+
+**▶ [Tester l'application dans le navigateur](https://kidneyvault-synthetic-medical-data-rwhxgvuxwbnw4tir7sd9dp.streamlit.app/)**
+
+Screening de cohortes, tableaux de bord, et surtout le **requêteur en langage
+naturel** (agent IA) : posez une question en français, l'agent la traduit en SQL
+gouverné (lecture seule, validé, affiché). L'app **s'auto-amorce** au premier
+chargement — elle construit elle-même tout son pipeline (~1 min).
 
 ---
 

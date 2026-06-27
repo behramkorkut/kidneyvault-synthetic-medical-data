@@ -29,10 +29,17 @@ def charger_cohorte() -> pl.DataFrame:
     return df
 
 
-st.title("🔬 KidneyVault — Screening de cohortes")
+st.title("KidneyVault — Screening de cohortes")
 st.caption(
     "Sélection de patients sur la couche Gold (données 100 % synthétiques). "
     "Cas d'usage : études de faisabilité, jeux de données de projets ancillaires."
+)
+
+# Accès direct et visible à l'agent requêteur (autre page).
+st.page_link(
+    "pages/1_Requeteur_IA.py",
+    label="Nouveau — interroger les données en langage naturel (Requêteur IA)",
+    use_container_width=True,
 )
 
 @st.cache_resource
