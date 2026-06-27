@@ -5,6 +5,10 @@ Sur un déploiement (Streamlit Community Cloud), le warehouse n'est pas committ�
 couche Bronze puis on matérialise les modèles dbt — exactement comme le pipeline
 local — pour que l'application fonctionne sans provisioning manuel.
 
+La racine du dépôt est TRANSMISE par l'appelant (la page Streamlit, qui vit
+toujours dans le dépôt), et non devinée depuis ce module : en déploiement, le
+package est *installé* dans le venv, donc son chemin ne reflète pas le dépôt.
+
 Idempotent : si la couche Gold existe déjà, on ne refait rien.
 """
 
@@ -13,32 +17,30 @@ from pathlib import Path
 
 import duckdb
 
-# Racine du dépôt (src/kidneyvault/bootstrap.py -> remonte de deux niveaux).
-RACINE = Path(__file__).resolve().parents[2]
-BASE = RACINE / "data" / "kidneyvault.duckdb"
 
-
-def warehouse_pret() -> bool:
+def _gold_pret(base: Path) -> bool:
     """Vrai si le fichier DuckDB existe et contient la table Gold attendue."""
-    if not BASE.exists():
+    if not base.exists():
         return False
     try:
-        con = duckdb.connect(str(BASE), read_only=True)
-        tables = {ligne[0] for ligne in con.execute("SHOW TABLES").fetchall()}
+        con = duckdb.connect(str(base), read_only=True)
+        tables = {row[0] for row in con.execute("SHOW TABLES").fetchall()}
         con.close()
         return "gold_cohorte_patient" in tables
     except duckdb.Error:
         return False
 
 
-def ensure_warehouse() -> None:
+def ensure_warehouse(racine: Path) -> None:
     """Construit Bronze + modèles dbt si le warehouse n'est pas déjà prêt.
 
-    S'exécute depuis la racine du dépôt : les chemins relatifs de dbt
-    (`--project-dir dbt`) et des sources Parquet (`data/01_bronze/...`) en
-    dépendent. Le répertoire courant est restauré ensuite.
+    Args:
+        racine: racine du dépôt (contient `dbt/`, `data/`). Les chemins relatifs
+            de dbt et des sources Parquet sont résolus depuis là.
     """
-    if warehouse_pret():
+    racine = Path(racine).resolve()
+    base = racine / "data" / "kidneyvault.duckdb"
+    if _gold_pret(base):
         return
 
     from kidneyvault.corrupteur import corrompre_eds
@@ -46,7 +48,7 @@ def ensure_warehouse() -> None:
     from kidneyvault.persist import ecrire_bronze
 
     ancien_cwd = Path.cwd()
-    os.chdir(RACINE)
+    os.chdir(racine)
     try:
         # 1. Couche Bronze : données synthétiques + défauts réalistes injectés
         tables = generer_eds()
@@ -61,6 +63,9 @@ def ensure_warehouse() -> None:
             ["run", "--project-dir", "dbt", "--profiles-dir", "dbt"]
         )
         if not resultat.success:
-            raise RuntimeError("Échec du `dbt run` pendant l'auto-amorçage.")
+            raise RuntimeError(
+                f"`dbt run` a échoué pendant l'auto-amorçage : "
+                f"{resultat.exception or 'voir les logs'}"
+            )
     finally:
         os.chdir(ancien_cwd)

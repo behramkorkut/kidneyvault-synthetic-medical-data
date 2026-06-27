@@ -14,7 +14,8 @@ import duckdb
 import polars as pl
 import streamlit as st
 
-BASE = Path(__file__).resolve().parents[1] / "data" / "kidneyvault.duckdb"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+BASE = REPO_ROOT / "data" / "kidneyvault.duckdb"
 
 st.set_page_config(page_title="KidneyVault — Screening", page_icon="🔬", layout="wide")
 
@@ -39,7 +40,7 @@ def _bootstrap() -> bool:
     """Construit le warehouse au premier démarrage (utile en déploiement)."""
     from kidneyvault.bootstrap import ensure_warehouse
 
-    ensure_warehouse()
+    ensure_warehouse(REPO_ROOT)
     return True
 
 
