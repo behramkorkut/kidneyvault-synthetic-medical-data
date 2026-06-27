@@ -13,6 +13,7 @@ Idempotent : si la couche Gold existe déjà, on ne refait rien.
 """
 
 import os
+import subprocess
 from pathlib import Path
 
 import duckdb
@@ -55,17 +56,23 @@ def ensure_warehouse(racine: Path) -> None:
         tables, _ = corrompre_eds(tables)
         ecrire_bronze(tables)
 
-        # 2. Matérialisation des modèles dbt (staging -> silver -> gold)
-        os.environ.setdefault("DBT_SEND_ANONYMOUS_USAGE_STATS", "0")
-        from dbt.cli.main import dbtRunner
-
-        resultat = dbtRunner().invoke(
-            ["run", "--project-dir", "dbt", "--profiles-dir", "dbt"]
+        # 2. Matérialisation des modèles dbt, dans un SOUS-PROCESSUS.
+        # Indispensable : dbt-duckdb garderait sa connexion lecture-écriture
+        # ouverte in-process ; une connexion read_only ouverte ensuite dans le
+        # même process échouerait (« different configuration »). En se terminant,
+        # le sous-processus libère le fichier DuckDB.
+        env = {**os.environ, "DBT_SEND_ANONYMOUS_USAGE_STATS": "0"}
+        proc = subprocess.run(
+            ["dbt", "run", "--project-dir", "dbt", "--profiles-dir", "dbt"],
+            cwd=racine,
+            env=env,
+            capture_output=True,
+            text=True,
         )
-        if not resultat.success:
+        if proc.returncode != 0:
+            details = (proc.stderr or proc.stdout or "").strip()[-2000:]
             raise RuntimeError(
-                f"`dbt run` a échoué pendant l'auto-amorçage : "
-                f"{resultat.exception or 'voir les logs'}"
+                f"`dbt run` a échoué pendant l'auto-amorçage :\n{details}"
             )
     finally:
         os.chdir(ancien_cwd)
