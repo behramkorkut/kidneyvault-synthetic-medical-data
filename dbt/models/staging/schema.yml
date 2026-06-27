@@ -10,13 +10,15 @@ models:
       - name: sexe
         tests:
           - accepted_values:
-              values: ["H", "F"]
+              arguments:
+                values: ["H", "F"]
       - name: centre_id
         tests:
           - not_null
           - relationships:          # intégrité référentielle inter-tables :
-              to: ref('stg_centre') # ce que Pandera ne pouvait PAS faire
-              field: centre_id
+              arguments:
+                to: ref('stg_centre') # ce que Pandera ne pouvait PAS faire
+                field: centre_id
 
   - name: stg_centre
     columns:
@@ -25,7 +27,8 @@ models:
       - name: type_centre
         tests:
           - accepted_values:
-              values: ["CHU", "CH", "Privé", "CLCC"]
+              arguments:
+                values: ["CHU", "CH", "Privé", "CLCC"]
   
 
   - name: stg_examen_pretherapeutique

@@ -23,3 +23,8 @@ jobs:
 
       - name: Tests (pytest)
         run: uv run pytest -v
+
+      - name: Pipeline + tests dbt (Bronze puis dbt build)
+        run: |
+          uv run python -m kidneyvault.build_bronze
+          uv run dbt build --project-dir dbt --profiles-dir dbt

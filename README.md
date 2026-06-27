@@ -89,6 +89,22 @@ statistiques. D'où une couche qualité SQL dédiée, dont l'efficacité est
 **mesurée** contre la vérité terrain du corrupteur (rappel et précision par
 type de défaut).
 
+### Résultats mesurés de la couche qualité
+
+Sur la configuration de référence (`uv run python -m kidneyvault.evaluation`) :
+
+| Défaut injecté | Injectés | Détectés | Rappel | Précision |
+|---|---|---|---|---|
+| `chirurgie_avant_examen` | 3 | 3 | 100 % | 100 % |
+| `divergence_taille_imagerie_anapath` | 3 | 3 | 100 % | 100 % |
+| `doublon_inter_centres` | 2 | 2 | 100 % | 100 % |
+
+Les défauts *de pattern* (complétude dégradée du score R.E.N.A.L. selon le type
+de centre) ne sont pas évaluables ligne à ligne — un `null` isolé est licite —
+et sont suivis par un **indicateur** dédié (complétude par centre), pas par un
+contrôle booléen. Le rappel de 100 % n'est pas une fin en soi : c'est un
+*harnais de mesure* qui détecte immédiatement toute régression d'un contrôle.
+
 ### L'agent requêteur (text-to-SQL)
 
 Un agent traduit une question en langage naturel (« les patients âgés avec une
