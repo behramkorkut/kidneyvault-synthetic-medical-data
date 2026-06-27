@@ -1,0 +1,16 @@
+name: kidneyvault
+version: "1.0.0"
+config-version: 2
+profile: kidneyvault
+
+model-paths: ["models"]
+test-paths: ["tests"]
+
+models:
+  kidneyvault:
+    staging:
+      +materialized: view    # interfaces légères, recalculées à la volée
+    silver:
+      +materialized: table   # données nettoyées, persistées dans le .duckdb
+    gold:
+      +materialized: table   # datamarts prêts à consommer

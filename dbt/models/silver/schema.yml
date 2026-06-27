@@ -1,0 +1,22 @@
+version: 2
+
+models:
+  - name: silver_patient
+    description: "Patients dédoublonnés (une ligne par personne physique)."
+    columns:
+      - name: patient_id
+        tests: [unique, not_null]
+
+  - name: silver_chirurgie
+    description: "Chirurgies plausibles (dates antidatées exclues)."
+    columns:
+      - name: chirurgie_id
+        tests: [unique, not_null]
+
+  - name: silver_anatomopathologie
+    description: "Anapaths avec drapeau de divergence imagerie/anapath."
+    columns:
+      - name: anapath_id
+        tests: [unique, not_null]
+      - name: taille_divergente
+        tests: [not_null]

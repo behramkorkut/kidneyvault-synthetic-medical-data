@@ -1,0 +1,38 @@
+[project]
+name = "kidneyvault"
+version = "0.1.0"
+description = "EDS de recherche oncologique simulé (cancer du rein) — de la génération de données synthétiques au contrôle qualité"
+authors = [{ name = "Behram Korkut", email = "behramkorkut@gmail.com" }]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "dbt-duckdb>=1.10.1",
+    "duckdb>=1.5.3",
+    "faker>=40.21.0",
+    "pandera[polars]>=0.31.1",
+    "polars>=1.41.2",
+    "pyarrow>=24.0.0",
+    "streamlit>=1.58.0",
+]
+
+[project.optional-dependencies]
+agent = [
+    "anthropic>=0.109.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "ruff>=0.15.15",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+package = true
+
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kidneyvault"]

@@ -1,0 +1,114 @@
+version: 2
+
+models:
+  - name: stg_patient
+    columns:
+      - name: patient_id
+        tests: [unique, not_null]
+      - name: cle_uroccr
+        tests: [unique, not_null]
+      - name: sexe
+        tests:
+          - accepted_values:
+              values: ["H", "F"]
+      - name: centre_id
+        tests:
+          - not_null
+          - relationships:          # intégrité référentielle inter-tables :
+              to: ref('stg_centre') # ce que Pandera ne pouvait PAS faire
+              field: centre_id
+
+  - name: stg_centre
+    columns:
+      - name: centre_id
+        tests: [unique, not_null]
+      - name: type_centre
+        tests:
+          - accepted_values:
+              values: ["CHU", "CH", "Privé", "CLCC"]
+  
+
+  - name: stg_examen_pretherapeutique
+    columns:
+      - name: examen_id
+        tests: [unique, not_null]
+      - name: patient_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_patient')
+                field: patient_id
+      - name: type_imagerie
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["Scanner", "IRM"]
+
+  - name: stg_chirurgie
+    columns:
+      - name: chirurgie_id
+        tests: [unique, not_null]
+      - name: patient_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_patient')
+                field: patient_id
+      - name: type_chirurgie
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["Néphrectomie partielle", "Néphrectomie totale"]
+
+  - name: stg_anatomopathologie
+    columns:
+      - name: anapath_id
+        tests: [unique, not_null]
+      - name: chirurgie_id
+        tests:
+          - not_null
+          - relationships:        # une anapath sans chirurgie est impossible
+              arguments:
+                to: ref('stg_chirurgie')
+                field: chirurgie_id
+      - name: marges_chirurgicales
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["Négatives", "Positives"]
+
+  - name: stg_suivi
+    columns:
+      - name: suivi_id
+        tests: [unique, not_null]
+      - name: patient_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_patient')
+                field: patient_id
+      - name: statut
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["Vivant sans maladie", "Vivant avec maladie", "Décédé"]
+
+  - name: stg_traitement_oncologie
+    columns:
+      - name: traitement_id
+        tests: [unique, not_null]
+      - name: patient_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_patient')
+                field: patient_id
+      - name: classe_therapeutique
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["Anti-angiogénique", "Immunothérapie", "Thérapie ciblée"]

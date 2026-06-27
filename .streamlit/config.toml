@@ -1,0 +1,4 @@
+# Thème de l'application (committé ; les secrets restent hors Git).
+[theme]
+base = "light"
+primaryColor = "#2c7fb8"

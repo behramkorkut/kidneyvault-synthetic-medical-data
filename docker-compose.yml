@@ -1,0 +1,49 @@
+name: kidneyvault
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: kidneyvault-postgres
+    environment:                        # valeurs lues depuis .env (non versionné)
+      POSTGRES_DB: ${POSTGRES_DB:-kidneyvault}
+      POSTGRES_USER: ${POSTGRES_USER:-kidney}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Définir POSTGRES_PASSWORD dans .env}
+    ports:
+      - "5433:5432"                     # 5433 côté hôte : évite tout conflit
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d
+    networks:
+      - kidneyvault-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  metabase:
+    image: metabase/metabase:latest
+    container_name: kidneyvault-metabase
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:                        # Metabase range SA config dans une
+      MB_DB_TYPE: postgres              # base séparée (metabase_app), jamais
+      MB_DB_DBNAME: metabase_app        # mélangée aux données analytiques
+      MB_DB_PORT: 5432
+      MB_DB_USER: ${POSTGRES_USER:-kidney}
+      MB_DB_PASS: ${POSTGRES_PASSWORD:?Définir POSTGRES_PASSWORD dans .env}
+      MB_DB_HOST: postgres
+    networks:
+      - kidneyvault-net
+
+networks:
+  kidneyvault-net:
+    driver: bridge
+
+
+
+volumes:
+  pgdata:

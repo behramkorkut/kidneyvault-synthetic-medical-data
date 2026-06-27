@@ -1,0 +1,4 @@
+# Dépendances du déploiement Streamlit Community Cloud.
+# Installe le package local KidneyVault + l'extra « agent » (anthropic) ;
+# les versions font foi dans pyproject.toml / uv.lock (pas de duplication ici).
+.[agent]

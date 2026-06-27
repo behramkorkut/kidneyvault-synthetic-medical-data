@@ -1,0 +1,35 @@
+version: 2
+
+models:
+  - name: gold_cohorte_patient
+    description: >
+      Jeu de données d'analyse : une ligne par patient, variables démographiques,
+      chirurgicales, anatomopathologiques et de suivi à plat. Source pour le
+      screening de cohortes et l'export vers R/SAS.
+    columns:
+      - name: patient_id
+        tests: [unique, not_null]
+      - name: age_inclusion
+        tests: [not_null]
+      - name: n_suivis
+        tests: [not_null]
+      - name: a_ete_opere
+        tests: [not_null]
+        
+  - name: gold_kpi_activite_par_centre
+    description: "Indicateurs d'activité agrégés par type de centre."
+    columns:
+      - name: type_centre
+        tests: [unique, not_null]
+
+  - name: gold_kpi_inclusions_annuelles
+    description: "Flux d'inclusions annuelles du réseau."
+    columns:
+      - name: annee_inclusion
+        tests: [unique, not_null]
+
+  - name: gold_kpi_histologie
+    description: "Répartition des sous-types histologiques."
+    columns:
+      - name: type_histologique
+        tests: [unique, not_null]

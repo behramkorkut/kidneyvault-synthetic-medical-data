@@ -1,0 +1,20 @@
+version: 2
+
+sources:
+  - name: bronze
+    description: "Couche Bronze : Parquet bruts issus du générateur + corrupteur."
+    meta:
+      external_location: "data/01_bronze/{name}.parquet"
+    tables:
+      - name: centre
+      - name: patient
+      - name: examen_pretherapeutique
+      - name: chirurgie
+      - name: anatomopathologie
+      - name: suivi
+      - name: traitement_oncologie
+  
+
+# Concept — la couche staging. 
+# Un modèle staging par table source, en 1:1 : c'est l'interface stable entre la source et le reste du DAG 
+# (si la source change de format, seul le staging bouge). 

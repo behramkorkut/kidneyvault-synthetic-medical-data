@@ -1,0 +1,12 @@
+kidneyvault:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: data/kidneyvault.duckdb   # relatif à la racine du repo
+      threads: 4
+
+  ## Concept — les sources externes. 
+  ## dbt-duckdb sait pointer directement sur tes Parquet Bronze : 
+  ## la Bronze reste en fichiers (lakehouse, comme ta couche qualité), 
+  ## dbt matérialise Silver/Gold dans data/kidneyvault.duckdb (déjà gitignoré). 
