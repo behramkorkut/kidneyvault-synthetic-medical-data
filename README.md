@@ -164,10 +164,9 @@ uv run pytest -v
 uv run ruff check .
 ```
 
-### Agent requêteur (optionnel, nécessite une clé API Claude)
+### Agent requêteur (nécessite une clé API Claude)
 
 ```bash
-uv sync --extra agent                     # installe le SDK anthropic
 export ANTHROPIC_API_KEY=sk-ant-...
 uv run python -m kidneyvault.agent_requeteur "Combien de patients métastatiques ?"
 # (ou via la page « Requeteur IA » de l'app Streamlit)
@@ -200,7 +199,7 @@ dans son navigateur.
 Déploiement : pointer une app sur [share.streamlit.io](https://share.streamlit.io)
 vers `app/screening.py` (Python 3.12), puis ajouter `ANTHROPIC_API_KEY` en
 *secret* pour activer la page Requêteur IA. Les dépendances sont décrites par
-`requirements.txt` (installe le package local + l'extra `agent`).
+`requirements.txt` (installe le package local et toutes ses dépendances).
 
 ## Structure du dépôt
 

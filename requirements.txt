@@ -1,6 +1,3 @@
-# Déploiement Streamlit Community Cloud.
-# Installe le package local KidneyVault + ses dépendances, et l'extra « agent ».
-# anthropic est aussi listé explicitement par robustesse : certains
-# environnements n'appliquent pas les extras d'un chemin local (« .[agent] »).
-.[agent]
-anthropic>=0.109.1
+# Déploiement Streamlit Community Cloud : installe le package local KidneyVault
+# et toutes ses dépendances (anthropic inclus, désormais en dépendance cœur).
+.
