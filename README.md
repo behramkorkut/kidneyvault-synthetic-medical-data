@@ -16,7 +16,7 @@ transformations dbt (Medallion) → screening de cohortes et pilotage décisionn
 > patient n'est utilisée ni accessible. Le modèle s'inspire de structures
 > cliniques publiques à des fins pédagogiques et de démonstration.
 
-## 🚀 Démo live (sans installation)
+## Démo live (sans installation)
 
 **▶ [Tester l'application dans le navigateur](https://kidneyvault-synthetic-medical-data-rwhxgvuxwbnw4tir7sd9dp.streamlit.app/)**
 
