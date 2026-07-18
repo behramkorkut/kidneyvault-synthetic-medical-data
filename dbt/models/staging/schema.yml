@@ -12,6 +12,11 @@ models:
           - accepted_values:
               arguments:
                 values: ["H", "F"]
+      - name: statut_vital
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["vivant", "décédé"]
       - name: centre_id
         tests:
           - not_null
@@ -115,3 +120,13 @@ models:
           - accepted_values:
               arguments:
                 values: ["Anti-angiogénique", "Immunothérapie", "Thérapie ciblée"]
+      - name: molecule
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["Sunitinib", "Nivolumab", "Pembrolizumab", "Cabozantinib", "Axitinib"]
+      - name: reponse
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["Complète", "Partielle", "Stable", "Progression"]

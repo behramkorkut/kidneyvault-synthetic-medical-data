@@ -9,10 +9,13 @@ Prérequis : la stack docker-compose est démarrée (Postgres en bonne santé).
 Usage : uv run python -m kidneyvault.publish
 """
 
+import logging
 import os
 from pathlib import Path
 
 import duckdb
+
+logger = logging.getLogger(__name__)
 
 RACINE = Path(__file__).resolve().parents[2]
 # Chemin absolu dérivé du module : indépendant du répertoire d'appel (M9).
@@ -65,23 +68,37 @@ def _dsn() -> str:
 
 
 def main() -> None:
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s  %(levelname)s  %(message)s"
+    )
     # Connexion en lecture-écriture : on LIT l'entrepôt DuckDB, mais on doit
     # pouvoir ÉCRIRE dans le catalogue Postgres attaché. Une connexion
     # read_only forcerait AUSSI le Postgres attaché en lecture seule.
     # Pas de contention : la publication ne tourne jamais pendant dbt.
     con = duckdb.connect(BASE)
-    
     con.execute("INSTALL postgres; LOAD postgres;")
     con.execute(f"ATTACH '{_dsn()}' AS pg (TYPE postgres);")
+    logger.info("Publication vers Postgres — %d tables.", len(TABLES_SERVIES))
 
-    for table in TABLES_SERVIES:
-        con.execute(f"DROP TABLE IF EXISTS pg.{table};")
-        con.execute(f"CREATE TABLE pg.{table} AS SELECT * FROM {table};")
-        n = con.execute(f"SELECT count(*) FROM pg.{table}").fetchone()[0]
-        print(f"✓ {table:32s} → Postgres ({n} lignes)")
-
-    con.close()
-    print("\nCouche de service publiée.")
+    # Publication ATOMIQUE : les DROP/CREATE de toutes les tables sont dans une
+    # seule transaction. En cas d'échec en cours de route, un ROLLBACK laisse la
+    # couche de service Postgres exactement dans son état antérieur — jamais
+    # à moitié republiée (BI qui lirait des tables manquantes ou incohérentes).
+    con.execute("BEGIN TRANSACTION;")
+    try:
+        for table in TABLES_SERVIES:
+            con.execute(f"DROP TABLE IF EXISTS pg.{table};")
+            con.execute(f"CREATE TABLE pg.{table} AS SELECT * FROM {table};")
+            n = con.execute(f"SELECT count(*) FROM pg.{table}").fetchone()[0]
+            logger.info("  %-32s → Postgres (%d lignes)", table, n)
+        con.execute("COMMIT;")
+    except Exception:
+        con.execute("ROLLBACK;")
+        logger.exception("Échec de publication : ROLLBACK, Postgres inchangé.")
+        raise
+    finally:
+        con.close()
+    logger.info("Couche de service publiée (transaction validée).")
 
 
 if __name__ == "__main__":
