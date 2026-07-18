@@ -68,7 +68,20 @@ question = st.text_input("Votre question",
                          value=st.session_state.get("question", ""))
 
 if st.button("Interroger", type="primary") and question:
+    import time
+
     from kidneyvault.agent_requeteur import repondre
+    from kidneyvault.rate_limit import etat_quota
+
+    # Garde de coût (M10) : chaque requête = un appel API payant. On borne le
+    # nombre d'appels par session et l'intervalle entre deux, via l'historique
+    # des timestamps gardé en session.
+    appels = st.session_state.setdefault("appels_ia", [])
+    autorise, message = etat_quota(appels, time.time())
+    if not autorise:
+        st.warning(message)
+        st.stop()
+    appels.append(time.time())
 
     with st.spinner("L'agent réfléchit..."):
         try:

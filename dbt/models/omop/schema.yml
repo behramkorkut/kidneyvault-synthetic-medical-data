@@ -12,6 +12,12 @@ models:
           - accepted_values:
               arguments:
                 values: [8507, 8532, 0]
+      - name: care_site_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('omop_care_site')
+                field: care_site_id
 
   - name: omop_procedure_occurrence
     columns:
@@ -55,3 +61,23 @@ models:
               arguments:
                 to: ref('omop_person')
                 field: person_id
+
+  - name: omop_observation_period
+    description: "OMOP OBSERVATION_PERIOD — requise par l'écosystème OHDSI."
+    columns:
+      - name: observation_period_id
+        tests: [unique, not_null]
+      - name: person_id
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('omop_person')
+                field: person_id
+
+  - name: omop_care_site
+    description: "OMOP CARE_SITE — établissements référencés par PERSON."
+    columns:
+      - name: care_site_id
+        tests: [unique, not_null]

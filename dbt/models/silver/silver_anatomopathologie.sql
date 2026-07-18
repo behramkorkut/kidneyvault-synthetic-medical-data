@@ -8,7 +8,7 @@
 -- données manquantes relèvent de la couche qualité, pas de ce drapeau.
 with dernier_examen as (
     select patient_id, taille_tumeur_mm
-    from {{ ref('stg_examen_pretherapeutique') }}
+    from {{ ref('silver_examen_pretherapeutique') }}
     qualify row_number() over (
         partition by patient_id
         order by date_examen desc

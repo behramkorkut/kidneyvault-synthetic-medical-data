@@ -7,7 +7,7 @@
 -- silencieusement.
 with dernier_examen as (
     select patient_id, max(date_examen) as date_dernier_examen
-    from {{ ref('stg_examen_pretherapeutique') }}
+    from {{ ref('silver_examen_pretherapeutique') }}
     group by patient_id
 )
 

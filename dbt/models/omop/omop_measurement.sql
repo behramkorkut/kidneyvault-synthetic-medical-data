@@ -11,7 +11,7 @@ with mesures as (
         4265162                             as measurement_concept_id,
         cast(e.taille_tumeur_mm as double)  as value_as_number,
         'taille_tumeur_mm (imagerie)'       as measurement_source_value
-    from {{ ref('stg_examen_pretherapeutique') }} as e
+    from {{ ref('silver_examen_pretherapeutique') }} as e
     where e.taille_tumeur_mm is not null
 
     union all
@@ -33,7 +33,7 @@ with mesures as (
         0,
         cast(e.score_renal as double),
         'score_renal'
-    from {{ ref('stg_examen_pretherapeutique') }} as e
+    from {{ ref('silver_examen_pretherapeutique') }} as e
     where e.score_renal is not null
 
     union all

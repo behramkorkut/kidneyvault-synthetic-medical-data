@@ -20,3 +20,50 @@ models:
         tests: [unique, not_null]
       - name: taille_divergente
         tests: [not_null]
+
+  - name: silver_centre
+    description: "Dimension centre de référence (canonique pour Gold/OMOP)."
+    columns:
+      - name: centre_id
+        tests: [unique, not_null]
+
+  - name: silver_examen_pretherapeutique
+    description: "Bilans pré-thérapeutiques (imagerie), interface Silver stable."
+    columns:
+      - name: examen_id
+        tests: [unique, not_null]
+      - name: patient_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('silver_patient')
+                field: patient_id
+
+  - name: silver_suivi
+    description: "Consultations de suivi longitudinal, interface Silver stable."
+    columns:
+      - name: suivi_id
+        tests: [unique, not_null]
+      - name: patient_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('silver_patient')
+                field: patient_id
+
+  - name: silver_traitement_oncologie
+    description: "Lignes de traitement systémique, cohérence des dates flaguée."
+    columns:
+      - name: traitement_id
+        tests: [unique, not_null]
+      - name: patient_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('silver_patient')
+                field: patient_id
+      - name: date_fin_incoherente
+        tests: [not_null]
