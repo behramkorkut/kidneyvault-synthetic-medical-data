@@ -53,8 +53,30 @@ _INTERDITS = re.compile(
 )
 
 # Tables et CTE : seules les tables Gold sont interrogeables.
-_REF_TABLE = re.compile(r"\b(?:from|join)\s+([a-zA-Z_]\w*)", re.IGNORECASE)
+# On capture le CONTENU complet d'une clause FROM/JOIN (jusqu'à la clause
+# suivante) pour attraper AUSSI les jointures implicites par virgule
+# — « FROM gold_x, silver_y » — que la lecture du seul 1er identifiant ratait.
+_CLAUSE_TABLES = re.compile(
+    r"\b(?:from|join)\s+(.+?)"
+    r"(?=\b(?:where|group|order|having|limit|qualify|window|on|using|"
+    r"inner|left|right|full|cross|natural|join|union|except|intersect)\b|\)|$)",
+    re.IGNORECASE | re.DOTALL,
+)
+_IDENT_INITIAL = re.compile(r"^([a-zA-Z_]\w*)")
 _NOM_CTE = re.compile(r"\b([a-zA-Z_]\w*)\s+as\s*\(", re.IGNORECASE)
+
+
+def _tables_referencees(sql: str) -> set[str]:
+    """Toutes les tables citées dans les clauses FROM/JOIN, virgules comprises.
+    Les sous-requêtes « FROM (SELECT … ) » ne produisent pas de table ici : leur
+    propre FROM interne est capturé séparément par finditer."""
+    tables: set[str] = set()
+    for clause in _CLAUSE_TABLES.finditer(sql):
+        for partie in clause.group(1).split(","):
+            m = _IDENT_INITIAL.match(partie.strip())
+            if m:
+                tables.add(m.group(1).lower())
+    return tables
 
 
 @dataclass
@@ -141,11 +163,10 @@ def valider_sql(sql: str) -> str:
         raise ValueError("La requête doit être un SELECT en lecture seule.")
     if _INTERDITS.search(nettoye):
         raise ValueError("Mot-clé interdit détecté (mutation ou commande).")
-    # Allowlist : toute référence FROM/JOIN doit être une table Gold ou une CTE
-    # de la requête elle-même.
+    # Allowlist : toute référence FROM/JOIN (virgules comprises) doit être une
+    # table Gold ou une CTE de la requête elle-même.
     ctes = {m.group(1).lower() for m in _NOM_CTE.finditer(nettoye)}
-    for ref in _REF_TABLE.finditer(nettoye):
-        table = ref.group(1).lower()
+    for table in _tables_referencees(nettoye):
         if table not in ctes and not table.startswith("gold"):
             raise ValueError(
                 f"Table non autorisée : « {table} » (couche Gold uniquement)."
@@ -153,11 +174,23 @@ def valider_sql(sql: str) -> str:
     return nettoye
 
 
+# LIMIT final (éventuellement suivi d'un OFFSET) : sert à ne pas doubler la
+# clause quand le modèle a déjà borné sa requête.
+_LIMIT_FINAL = re.compile(r"\blimit\s+(\d+)(?:\s+offset\s+\d+)?\s*$", re.IGNORECASE)
+
+
 def _borner(sql: str) -> str:
-    """Encapsule la requête validée dans un LIMIT dur (MAX_LIGNES + 1 pour
-    détecter la troncature). La requête affichée à l'utilisateur reste la
-    requête d'origine ; seule l'exécution est bornée."""
-    return f"select * from ({sql}) as _fenetre limit {MAX_LIGNES + 1}"
+    """Applique la borne dure MAX_LIGNES + 1 SANS encapsuler dans une
+    sous-requête : l'encapsulation faisait perdre le ORDER BY (DuckDB
+    n'ordonne pas une sous-requête sans LIMIT interne). On ajoute donc un
+    LIMIT en fin de requête, ou on plafonne celui que le modèle a déjà posé."""
+    s = sql.strip().rstrip(";").strip()
+    m = _LIMIT_FINAL.search(s)
+    if m:
+        if int(m.group(1)) <= MAX_LIGNES + 1:
+            return s  # déjà borné sous le plafond : on respecte le ORDER BY/LIMIT
+        return s[: m.start()].rstrip() + f"\nlimit {MAX_LIGNES + 1}"
+    return f"{s}\nlimit {MAX_LIGNES + 1}"
 
 
 def generer(

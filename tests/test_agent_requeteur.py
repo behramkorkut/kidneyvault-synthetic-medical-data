@@ -102,12 +102,51 @@ def test_table_hors_gold_dans_cte_rejetee():
         valider_sql("WITH t AS (SELECT * FROM stg_patient) SELECT * FROM t")
 
 
-# ---------- LIMIT forcé ----------
+def test_jointure_implicite_virgule_rejetee():
+    """Régression R1 : une table interdite jointe par virgule doit être vue."""
+    with pytest.raises(ValueError):
+        valider_sql("SELECT * FROM gold_cohorte_patient, silver_patient")
 
-def test_borner_encapsule_avec_limit():
-    borne = _borner("SELECT * FROM gold_cohorte_patient")
-    assert f"limit {MAX_LIGNES + 1}" in borne
-    assert borne.lower().startswith("select * from (")
+
+def test_jointure_implicite_gold_seules_acceptee():
+    """Deux tables Gold jointes par virgule restent licites."""
+    sql = "SELECT * FROM gold_cohorte_patient, gold_kpi_histologie"
+    assert valider_sql(sql) == sql
+
+
+# ---------- LIMIT forcé (sans casser le ORDER BY — régression R2) ----------
+
+def test_borner_ajoute_limit_sans_encapsuler():
+    """R2 : on n'encapsule plus dans une sous-requête (qui perdait l'ordre) ;
+    on ajoute un LIMIT en fin de requête."""
+    borne = _borner("SELECT * FROM gold_cohorte_patient ORDER BY age DESC")
+    assert f"limit {MAX_LIGNES + 1}" in borne.lower()
+    assert "order by age desc" in borne.lower()
+    assert not borne.lower().startswith("select * from (")
+    # le ORDER BY précède le LIMIT ajouté
+    assert borne.lower().index("order by") < borne.lower().index("limit")
+
+
+def test_borner_respecte_limit_du_modele_sous_plafond():
+    """Un LIMIT déjà posé sous le plafond est conservé tel quel."""
+    assert _borner("SELECT * FROM gold_cohorte_patient LIMIT 5").endswith("LIMIT 5")
+
+
+def test_borner_plafonne_limit_excessif():
+    """Un LIMIT au-dessus du plafond est ramené à MAX_LIGNES + 1."""
+    borne = _borner(f"SELECT * FROM gold_cohorte_patient LIMIT {MAX_LIGNES + 9000}")
+    assert borne.lower().count("limit") == 1
+    assert f"limit {MAX_LIGNES + 1}" in borne.lower()
+
+
+def test_borner_preserve_ordre_a_l_execution():
+    """Preuve d'exécution : l'ordre demandé survit au bornage."""
+    con = duckdb.connect(":memory:")
+    con.execute("CREATE TABLE gold_t AS SELECT * FROM (VALUES (13), (24)) t(age)")
+    direct = con.execute("SELECT age FROM gold_t ORDER BY age DESC").fetchall()
+    borne = con.execute(_borner("SELECT age FROM gold_t ORDER BY age DESC")).fetchall()
+    con.close()
+    assert direct == borne == [(24,), (13,)]
 
 
 # ---------- Extraction JSON ----------

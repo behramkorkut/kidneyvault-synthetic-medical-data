@@ -15,7 +15,8 @@ from pathlib import Path
 import duckdb
 
 RACINE = Path(__file__).resolve().parents[2]
-BASE = "data/kidneyvault.duckdb"
+# Chemin absolu dérivé du module : indépendant du répertoire d'appel (M9).
+BASE = str(RACINE / "data" / "kidneyvault.duckdb")
 
 
 # Seules ces tables sont exposées à la BI (la couche de service ne montre
