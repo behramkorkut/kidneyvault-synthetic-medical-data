@@ -3,10 +3,15 @@ seule) sur la couche Gold, via l'API Claude.
 
 Garde-fous (défense en profondeur) :
 1. connexion DuckDB en lecture seule (aucune écriture possible) ;
-2. validation du SQL généré (un seul SELECT, mots-clés dangereux interdits) ;
-3. sortie structurée : le modèle déclare ses hypothèses d'interprétation et les
+2. accès externe coupé au niveau moteur : SET enable_external_access = false
+   (bloque read_csv/read_parquet/ATTACH… donc toute lecture du système de
+   fichiers), verrouillé par SET lock_configuration = true ;
+3. validation du SQL généré (un seul SELECT, mots-clés et fonctions de lecture
+   externe interdits, tables restreintes à la couche Gold) ;
+4. LIMIT forcé à l'exécution (MAX_LIGNES) : borne le coût de toute requête ;
+5. sortie structurée : le modèle déclare ses hypothèses d'interprétation et les
    parties de la question qu'il n'a PAS pu satisfaire (anti-dérapage sémantique) ;
-4. transparence : le SQL exécuté est toujours retourné à l'utilisateur.
+6. transparence : le SQL exécuté est toujours retourné à l'utilisateur.
 
 ⚠️ Démonstration sur données 100 % synthétiques. En production santé, le modèle
 serait auto-hébergé sur infrastructure HDS (aucune sortie de donnée patient).
@@ -20,7 +25,8 @@ from __future__ import annotations
 import json
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import duckdb
 import polars as pl
@@ -31,15 +37,24 @@ if TYPE_CHECKING:
     from anthropic import Anthropic
 
 
-
-BASE = "data/kidneyvault.duckdb"
+# Chemin absolu dérivé du module (ne dépend plus du répertoire d'appel).
+_RACINE = Path(__file__).resolve().parents[2]
+BASE = str(_RACINE / "data" / "kidneyvault.duckdb")
 MODELE = "claude-sonnet-4-6"
+MAX_LIGNES = 500  # borne dure sur le nombre de lignes retournées
 
 _INTERDITS = re.compile(
     r"\b(insert|update|delete|drop|alter|create|attach|copy|pragma|"
-    r"install|load|export|import|truncate|replace|grant|revoke)\b",
+    r"install|load|export|import|truncate|replace|grant|revoke|"
+    # Fonctions de lecture externe : déjà neutralisées par
+    # enable_external_access=false, re-bloquées ici (défense en profondeur).
+    r"read_\w+|\w*_scan|glob|sniff_csv|getenv)\b",
     re.IGNORECASE,
 )
+
+# Tables et CTE : seules les tables Gold sont interrogeables.
+_REF_TABLE = re.compile(r"\b(?:from|join)\s+([a-zA-Z_]\w*)", re.IGNORECASE)
+_NOM_CTE = re.compile(r"\b([a-zA-Z_]\w*)\s+as\s*\(", re.IGNORECASE)
 
 
 @dataclass
@@ -50,6 +65,7 @@ class Reponse:
     resultat: pl.DataFrame | None
     hypotheses: str          # interprétation des termes vagues
     non_couvert: str         # parties non satisfaites par le schéma
+    tronque: bool = field(default=False)  # résultat coupé à MAX_LIGNES
 
 
 def decrire_schema(con: duckdb.DuckDBPyConnection) -> str:
@@ -116,7 +132,8 @@ def _extraire_json(reponse: str) -> dict:
 
 
 def valider_sql(sql: str) -> str:
-    """Garde-fou : autorise une unique requête de lecture, sinon ValueError."""
+    """Garde-fou : autorise une unique requête de lecture sur la couche Gold,
+    sinon ValueError."""
     nettoye = sql.strip().rstrip(";").strip()
     if ";" in nettoye:
         raise ValueError("Plusieurs instructions SQL détectées (interdit).")
@@ -124,7 +141,23 @@ def valider_sql(sql: str) -> str:
         raise ValueError("La requête doit être un SELECT en lecture seule.")
     if _INTERDITS.search(nettoye):
         raise ValueError("Mot-clé interdit détecté (mutation ou commande).")
+    # Allowlist : toute référence FROM/JOIN doit être une table Gold ou une CTE
+    # de la requête elle-même.
+    ctes = {m.group(1).lower() for m in _NOM_CTE.finditer(nettoye)}
+    for ref in _REF_TABLE.finditer(nettoye):
+        table = ref.group(1).lower()
+        if table not in ctes and not table.startswith("gold"):
+            raise ValueError(
+                f"Table non autorisée : « {table} » (couche Gold uniquement)."
+            )
     return nettoye
+
+
+def _borner(sql: str) -> str:
+    """Encapsule la requête validée dans un LIMIT dur (MAX_LIGNES + 1 pour
+    détecter la troncature). La requête affichée à l'utilisateur reste la
+    requête d'origine ; seule l'exécution est bornée."""
+    return f"select * from ({sql}) as _fenetre limit {MAX_LIGNES + 1}"
 
 
 def generer(
@@ -147,33 +180,66 @@ def generer(
     return _extraire_json(reponse.content[0].text)
 
 
-def repondre(question: str, max_essais: int = 2) -> Reponse:
-    """Question -> Reponse. Boucle agentique : en cas d'erreur d'exécution,
-    on renvoie l'erreur au modèle pour qu'il se corrige."""
-    from anthropic import Anthropic  # extra optionnel : importé à l'usage 
-    
+def repondre(question: str, max_essais: int = 3) -> Reponse:
+    """Question -> Reponse. Boucle agentique : toute erreur rattrapable (JSON
+    invalide, SQL refusé par le garde-fou, erreur d'exécution) est renvoyée au
+    modèle pour qu'il se corrige, jusqu'à max_essais."""
+    from anthropic import Anthropic  # extra optionnel : importé à l'usage
+
     client = Anthropic()
-    con = duckdb.connect(BASE, read_only=True)  # rempart dur : aucune écriture
-    schema = decrire_schema(con)
+    con = duckdb.connect(BASE, read_only=True)  # rempart 1 : aucune écriture
+    try:
+        # Rempart 2 : le moteur ne peut plus toucher au système de fichiers
+        # ni au réseau (read_csv, read_parquet, ATTACH…), et ce réglage est
+        # verrouillé pour toute la durée de la connexion.
+        con.execute("SET enable_external_access = false")
+        con.execute("SET lock_configuration = true")
 
-    erreur: str | None = None
-    for essai in range(1, max_essais + 1):
-        brut = generer(question, schema, client, erreur)
-        hypotheses = brut.get("hypotheses", "") or ""
-        non_couvert = brut.get("non_couvert", "") or ""
+        schema = decrire_schema(con)
 
-        if not brut.get("sql"):  # question jugée inanswerable
-            return Reponse(None, None, hypotheses, non_couvert)
+        erreur: str | None = None
+        for essai in range(1, max_essais + 1):
+            dernier = essai == max_essais
 
-        sql = valider_sql(brut["sql"])
-        try:
-            resultat = con.execute(sql).pl()
-            return Reponse(sql, resultat, hypotheses, non_couvert)
-        except duckdb.Error as exc:
-            erreur = str(exc)
-            if essai == max_essais:
-                raise
-    raise RuntimeError("Échec inattendu de la boucle agentique.")
+            try:
+                brut = generer(question, schema, client, erreur)
+            except (json.JSONDecodeError, KeyError, IndexError) as exc:
+                # Réponse illisible (JSON tronqué, clé absente…) : on redonne
+                # sa chance au modèle au lieu de planter.
+                if dernier:
+                    raise ValueError(
+                        f"Réponse du modèle illisible après {max_essais} "
+                        f"essais : {exc}"
+                    ) from exc
+                erreur = (
+                    f"Ta réponse précédente n'était pas le JSON attendu "
+                    f"({exc}). Réponds UNIQUEMENT avec l'objet JSON demandé."
+                )
+                continue
+
+            hypotheses = brut.get("hypotheses", "") or ""
+            non_couvert = brut.get("non_couvert", "") or ""
+
+            if not brut.get("sql"):  # question jugée inanswerable
+                return Reponse(None, None, hypotheses, non_couvert)
+
+            try:
+                sql = valider_sql(brut["sql"])  # dans le try : refus => retry
+                resultat = con.execute(_borner(sql)).pl()
+            except (ValueError, duckdb.Error) as exc:
+                if dernier:
+                    raise
+                erreur = str(exc)
+                continue
+
+            tronque = resultat.height > MAX_LIGNES
+            if tronque:
+                resultat = resultat.head(MAX_LIGNES)
+            return Reponse(sql, resultat, hypotheses, non_couvert, tronque)
+
+        raise RuntimeError("Échec inattendu de la boucle agentique.")
+    finally:
+        con.close()  # la connexion est toujours rendue, même sur erreur
 
 
 def main() -> None:
@@ -189,6 +255,8 @@ def main() -> None:
         return
     print(f"\nSQL généré :\n{rep.sql}\n")
     print(rep.resultat)
+    if rep.tronque:
+        print(f"⚠  Résultat tronqué aux {MAX_LIGNES} premières lignes.")
 
 
 if __name__ == "__main__":

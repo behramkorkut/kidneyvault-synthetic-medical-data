@@ -89,6 +89,8 @@ if st.button("Interroger", type="primary") and question:
     st.write("**SQL généré (lecture seule, validé) :**")
     st.code(rep.sql, language="sql")
 
+    if rep.tronque:
+        st.caption("⚠ Résultat tronqué (borne de sécurité sur le nombre de lignes).")
     st.write(f"**Résultat — {rep.resultat.height} ligne(s) :**")
     st.dataframe(rep.resultat, use_container_width=True, hide_index=True)
     st.download_button(
