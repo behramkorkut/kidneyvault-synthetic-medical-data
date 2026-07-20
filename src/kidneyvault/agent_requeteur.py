@@ -6,8 +6,11 @@ Garde-fous (défense en profondeur) :
 2. accès externe coupé au niveau moteur : SET enable_external_access = false
    (bloque read_csv/read_parquet/ATTACH… donc toute lecture du système de
    fichiers), verrouillé par SET lock_configuration = true ;
-3. validation du SQL généré (un seul SELECT, mots-clés et fonctions de lecture
-   externe interdits, tables restreintes à la couche Gold) ;
+3. validation du SQL généré par PARSING (sqlglot, dialecte DuckDB) : un seul
+   SELECT, aucun nœud DDL/DML dans l'arbre, fonctions de lecture externe
+   interdites, tables restreintes à la couche Gold (allowlist sur l'AST — les
+   sous-requêtes, identifiants entre guillemets et littéraux-chaîne piégés ne
+   passent plus entre les mailles d'une regex) ;
 4. LIMIT forcé à l'exécution (MAX_LIGNES) : borne le coût de toute requête ;
 5. sortie structurée : le modèle déclare ses hypothèses d'interprétation et les
    parties de la question qu'il n'a PAS pu satisfaire (anti-dérapage sémantique) ;
@@ -30,6 +33,8 @@ from pathlib import Path
 
 import duckdb
 import polars as pl
+import sqlglot
+from sqlglot import exp
 
 from typing import TYPE_CHECKING
 
@@ -42,51 +47,60 @@ _RACINE = Path(__file__).resolve().parents[2]
 BASE = str(_RACINE / "data" / "kidneyvault.duckdb")
 MODELE = "claude-sonnet-4-6"
 MAX_LIGNES = 500  # borne dure sur le nombre de lignes retournées
+MAX_QUESTION = 500  # borne dure sur la longueur de la question utilisateur
 
-_INTERDITS = re.compile(
-    r"\b(insert|update|delete|drop|alter|create|attach|copy|pragma|"
-    r"install|load|export|import|truncate|replace|grant|revoke|"
-    # Fonctions de lecture externe : déjà neutralisées par
-    # enable_external_access=false, re-bloquées ici (défense en profondeur).
-    r"read_\w+|\w*_scan|glob|sniff_csv|getenv)\b",
-    re.IGNORECASE,
+# Fonctions DuckDB de lecture externe : déjà neutralisées par
+# enable_external_access=false, re-bloquées ici (défense en profondeur).
+_FONCTIONS_INTERDITES = re.compile(
+    r"^(read_\w+|\w*_scan|glob|sniff_csv|getenv)$", re.IGNORECASE
 )
 
-# Tables et CTE : seules les tables Gold sont interrogeables.
-# On capture le CONTENU complet d'une clause FROM/JOIN (jusqu'à la clause
-# suivante) pour attraper AUSSI les jointures implicites par virgule
-# — « FROM gold_x, silver_y » — que la lecture du seul 1er identifiant ratait.
-_CLAUSE_TABLES = re.compile(
-    r"\b(?:from|join)\s+(.+?)"
-    r"(?=\b(?:where|group|order|having|limit|qualify|window|on|using|"
-    r"inner|left|right|full|cross|natural|join|union|except|intersect)\b|\)|$)",
-    re.IGNORECASE | re.DOTALL,
+# Nœuds AST interdits n'importe où dans la requête (DDL/DML/commandes).
+# getattr : tous les types n'existent pas dans toutes les versions de sqlglot.
+_NOEUDS_INTERDITS = tuple(
+    t
+    for t in (
+        getattr(exp, nom, None)
+        for nom in (
+            "Insert",
+            "Update",
+            "Delete",
+            "Drop",
+            "Create",
+            "Alter",
+            "Merge",
+            "TruncateTable",
+            "Grant",
+            "Copy",
+            "Attach",
+            "Detach",
+            "Pragma",
+            "Set",
+            "Use",
+            "Transaction",
+            "Command",
+            "Export",
+            "Install",
+            "LoadData",
+        )
+    )
+    if t is not None
 )
-_IDENT_INITIAL = re.compile(r"^([a-zA-Z_]\w*)")
-_NOM_CTE = re.compile(r"\b([a-zA-Z_]\w*)\s+as\s*\(", re.IGNORECASE)
 
-
-def _tables_referencees(sql: str) -> set[str]:
-    """Toutes les tables citées dans les clauses FROM/JOIN, virgules comprises.
-    Les sous-requêtes « FROM (SELECT … ) » ne produisent pas de table ici : leur
-    propre FROM interne est capturé séparément par finditer."""
-    tables: set[str] = set()
-    for clause in _CLAUSE_TABLES.finditer(sql):
-        for partie in clause.group(1).split(","):
-            m = _IDENT_INITIAL.match(partie.strip())
-            if m:
-                tables.add(m.group(1).lower())
-    return tables
+# Racines autorisées : SELECT, ou combinaison ensembliste de SELECT
+# (UNION/EXCEPT/INTERSECT). SetOperation n'existe pas dans les vieilles
+# versions de sqlglot, où Except/Intersect héritent de Union.
+_RACINES_AUTORISEES = (exp.Select, getattr(exp, "SetOperation", exp.Union))
 
 
 @dataclass
 class Reponse:
     """Résultat de l'agent : SQL, données, et ce que le modèle déclare."""
 
-    sql: str | None          # None si la question est inanswerable
+    sql: str | None  # None si la question est inanswerable
     resultat: pl.DataFrame | None
-    hypotheses: str          # interprétation des termes vagues
-    non_couvert: str         # parties non satisfaites par le schéma
+    hypotheses: str  # interprétation des termes vagues
+    non_couvert: str  # parties non satisfaites par le schéma
     tronque: bool = field(default=False)  # résultat coupé à MAX_LIGNES
 
 
@@ -153,25 +167,66 @@ def _extraire_json(reponse: str) -> dict:
     return json.loads(texte)
 
 
+def _nom_fonction(fonction: exp.Func) -> str:
+    """Nom canonique d'un nœud fonction (les fonctions inconnues du dialecte,
+    comme read_csv, arrivent en exp.Anonymous : leur nom est dans `this`)."""
+    if isinstance(fonction, exp.Anonymous):
+        return fonction.name.lower()
+    return fonction.sql_name().lower()
+
+
 def valider_sql(sql: str) -> str:
     """Garde-fou : autorise une unique requête de lecture sur la couche Gold,
-    sinon ValueError."""
+    sinon ValueError.
+
+    Validation par PARSING (sqlglot) et non par regex : l'analyse porte sur
+    l'arbre syntaxique, donc les sous-requêtes dans FROM, les identifiants
+    entre guillemets doubles et les littéraux-chaîne imitant une CTE sont vus
+    pour ce qu'ils sont (audit B1/B2/B3). Retourne le SQL reformaté depuis
+    l'arbre validé : ce qui est exécuté est exactement ce qui a été analysé.
+    """
     nettoye = sql.strip().rstrip(";").strip()
     if ";" in nettoye:
         raise ValueError("Plusieurs instructions SQL détectées (interdit).")
-    if not re.match(r"^(select|with)\b", nettoye, re.IGNORECASE):
+
+    try:
+        arbres = sqlglot.parse(nettoye, read="duckdb")
+    except sqlglot.errors.ParseError as exc:
+        raise ValueError(f"SQL non analysable : {exc}") from exc
+    if len(arbres) != 1 or arbres[0] is None:
+        raise ValueError("Exactement une instruction SQL est attendue.")
+    arbre = arbres[0]
+
+    if not isinstance(arbre, _RACINES_AUTORISEES):
         raise ValueError("La requête doit être un SELECT en lecture seule.")
-    if _INTERDITS.search(nettoye):
+    if _NOEUDS_INTERDITS and arbre.find(*_NOEUDS_INTERDITS) is not None:
         raise ValueError("Mot-clé interdit détecté (mutation ou commande).")
-    # Allowlist : toute référence FROM/JOIN (virgules comprises) doit être une
-    # table Gold ou une CTE de la requête elle-même.
-    ctes = {m.group(1).lower() for m in _NOM_CTE.finditer(nettoye)}
-    for table in _tables_referencees(nettoye):
-        if table not in ctes and not table.startswith("gold"):
+
+    # Fonctions : aucune lecture externe, même imbriquée (défense en
+    # profondeur, le moteur les bloque déjà via enable_external_access=false).
+    for fonction in arbre.find_all(exp.Func):
+        if _FONCTIONS_INTERDITES.match(_nom_fonction(fonction)):
+            raise ValueError(f"Fonction non autorisée : « {_nom_fonction(fonction)} ».")
+
+    # Allowlist de tables : seuls comptent les VRAIS nœuds Table de l'arbre
+    # (une chaîne 'x AS (' reste un littéral, une CTE est un nœud CTE). Toute
+    # table doit être Gold ou une CTE définie par la requête elle-même.
+    ctes = {cte.alias_or_name.lower() for cte in arbre.find_all(exp.CTE)}
+    for table in arbre.find_all(exp.Table):
+        nom = table.name.lower()
+        if not nom:  # fonction-table : déjà traitée par le filtre fonctions
+            continue
+        if table.catalog or table.db not in ("", "main"):
             raise ValueError(
-                f"Table non autorisée : « {table} » (couche Gold uniquement)."
+                f"Schéma non autorisé : « {table.sql(dialect='duckdb')} »."
             )
-    return nettoye
+        if nom not in ctes and not nom.startswith("gold"):
+            raise ValueError(
+                f"Table non autorisée : « {nom} » (couche Gold uniquement)."
+            )
+
+    # Formatage : SQL régénéré depuis l'arbre validé, lisible dans l'UI.
+    return arbre.sql(dialect="duckdb", pretty=True)
 
 
 # LIMIT final (éventuellement suivi d'un OFFSET) : sert à ne pas doubler la
@@ -217,6 +272,15 @@ def repondre(question: str, max_essais: int = 3) -> Reponse:
     """Question -> Reponse. Boucle agentique : toute erreur rattrapable (JSON
     invalide, SQL refusé par le garde-fou, erreur d'exécution) est renvoyée au
     modèle pour qu'il se corrige, jusqu'à max_essais."""
+    question = question.strip()
+    if not question:
+        raise ValueError("La question est vide.")
+    if len(question) > MAX_QUESTION:
+        raise ValueError(
+            f"Question trop longue ({len(question)} caractères, "
+            f"maximum {MAX_QUESTION})."
+        )
+
     from anthropic import Anthropic  # extra optionnel : importé à l'usage
 
     client = Anthropic()
@@ -241,8 +305,7 @@ def repondre(question: str, max_essais: int = 3) -> Reponse:
                 # sa chance au modèle au lieu de planter.
                 if dernier:
                     raise ValueError(
-                        f"Réponse du modèle illisible après {max_essais} "
-                        f"essais : {exc}"
+                        f"Réponse du modèle illisible après {max_essais} essais : {exc}"
                     ) from exc
                 erreur = (
                     f"Ta réponse précédente n'était pas le JSON attendu "

@@ -133,11 +133,23 @@ récidive au poumon ») en SQL exécuté sur la couche Gold, via l'API Claude.
 L'IA *propose*, le pipeline *dispose* — défense en profondeur :
 
 - **lecture seule** : la connexion DuckDB rejette physiquement toute écriture ;
-- **validation du SQL** avant exécution : une seule instruction, `SELECT`/`WITH`
-  uniquement, mots-clés de mutation interdits (testée hors-ligne, sans appel LLM) ;
+- **validation du SQL par parsing** (sqlglot, dialecte DuckDB) avant exécution :
+  une seule instruction, `SELECT` uniquement, aucun nœud DDL/DML dans l'arbre
+  syntaxique, fonctions de lecture externe interdites, tables restreintes à la
+  couche Gold via une allowlist sur l'AST — les sous-requêtes, identifiants
+  entre guillemets et littéraux piégés sont vus pour ce qu'ils sont (testée
+  hors-ligne, sans appel LLM, payloads d'audit rejoués en non-régression) ;
+- **borne de question** : 500 caractères maximum, rejet propre au-delà ;
+- **budget quotidien persistant** : 6 requêtes par jour et par adresse IP,
+  compteur côté serveur (Postgres si joignable, sinon fichier DuckDB local) —
+  survit aux rechargements de page, contrairement au quota de session.
+  *Résidu assumé* : sur Streamlit Cloud, le fichier local ne survit pas à un
+  redémarrage du conteneur (veille) ; le pire cas est un budget remis à zéro
+  au réveil, pas un robinet ouvert ;
 - **sortie structurée** : l'agent déclare ses hypothèses d'interprétation et les
   parties de la question qu'il ne peut pas satisfaire (anti-dérapage sémantique) ;
-- **transparence** : le SQL exécuté est toujours affiché à l'utilisateur.
+- **transparence** : le SQL exécuté est toujours affiché à l'utilisateur,
+  reformaté depuis l'arbre validé (ce qui est affiché est ce qui est exécuté).
 
 > ⚠️ Démonstration sur données 100 % synthétiques, donc sans enjeu RGPD. En
 > production santé, le modèle serait **auto-hébergé sur infrastructure HDS**

@@ -14,8 +14,9 @@ import streamlit as st
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-st.set_page_config(page_title="KidneyVault — Requêteur IA", page_icon="🤖",
-                   layout="wide")
+st.set_page_config(
+    page_title="KidneyVault — Requêteur IA", page_icon="🤖", layout="wide"
+)
 
 st.title("🤖 Requêteur IA — interrogation en langage naturel")
 st.caption(
@@ -64,20 +65,40 @@ for col, ex in zip(st.columns(len(EXEMPLES)), EXEMPLES):
     if col.button(ex, use_container_width=True):
         st.session_state["question"] = ex
 
-question = st.text_input("Votre question",
-                         value=st.session_state.get("question", ""))
+from kidneyvault.agent_requeteur import MAX_QUESTION  # noqa: E402
+
+question = st.text_input(
+    "Votre question", value=st.session_state.get("question", ""), max_chars=MAX_QUESTION
+)
 
 if st.button("Interroger", type="primary") and question:
     import time
 
     from kidneyvault.agent_requeteur import repondre
+    from kidneyvault.quota_serveur import consommer
     from kidneyvault.rate_limit import etat_quota
 
-    # Garde de coût (M10) : chaque requête = un appel API payant. On borne le
-    # nombre d'appels par session et l'intervalle entre deux, via l'historique
-    # des timestamps gardé en session.
+    # Borne de question : max_chars borne déjà la saisie, on revalide ici
+    # (session_state peut être pré-rempli) avec un message clair.
+    if len(question.strip()) > MAX_QUESTION:
+        st.warning(
+            f"Question trop longue ({len(question.strip())} caractères) : "
+            f"maximum {MAX_QUESTION}. Reformulez plus court."
+        )
+        st.stop()
+
+    # Garde de session (anti-marteau) : intervalle minimal entre deux appels
+    # et plafond par session, via l'historique de timestamps en session.
     appels = st.session_state.setdefault("appels_ia", [])
     autorise, message = etat_quota(appels, time.time())
+    if not autorise:
+        st.warning(message)
+        st.stop()
+
+    # Garde serveur (persistante) : budget quotidien par adresse IP, stocké
+    # dans Postgres ou un fichier local — survit aux rechargements de page.
+    ip = getattr(st.context, "ip_address", None) or "ip-inconnue"
+    autorise, message = consommer(ip)
     if not autorise:
         st.warning(message)
         st.stop()

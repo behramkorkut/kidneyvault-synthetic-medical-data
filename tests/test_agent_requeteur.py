@@ -9,27 +9,52 @@ le LLM produit.
 import duckdb
 import pytest
 
-from kidneyvault.agent_requeteur import MAX_LIGNES, _borner, _extraire_json, valider_sql
+from kidneyvault.agent_requeteur import (
+    MAX_LIGNES,
+    MAX_QUESTION,
+    _borner,
+    _extraire_json,
+    repondre,
+    valider_sql,
+)
+
+
+def _normalise(sql: str) -> str:
+    """Le SQL validé est régénéré (formaté) depuis l'AST : pour comparer,
+    on écrase les espaces/retours à la ligne, parenthèses comprises."""
+    return " ".join(sql.split()).lower().replace("( ", "(").replace(" )", ")")
 
 
 # ---------- Requêtes licites ----------
 
+
 def test_select_simple_valide():
     sql = "SELECT * FROM gold_cohorte_patient"
-    assert valider_sql(sql) == sql
+    assert _normalise(valider_sql(sql)) == _normalise(sql)
 
 
 def test_with_valide():
     sql = "WITH t AS (SELECT 1 AS x) SELECT x FROM t"
-    assert valider_sql(sql) == sql
+    assert _normalise(valider_sql(sql)) == _normalise(sql)
 
 
 def test_point_virgule_final_toleré():
     """Un ; final unique est nettoyé, pas rejeté."""
-    assert valider_sql("SELECT 1;") == "SELECT 1"
+    assert _normalise(valider_sql("SELECT 1;")) == "select 1"
+
+
+def test_sql_valide_reste_executable():
+    """Le SQL régénéré depuis l'AST (formaté) doit rester exécutable tel quel :
+    ce qui est affiché est ce qui est exécuté."""
+    con = duckdb.connect(":memory:")
+    con.execute("CREATE TABLE gold_t AS SELECT 1 AS x")
+    valide = valider_sql("SELECT x FROM gold_t ORDER BY x")
+    assert con.execute(valide).fetchall() == [(1,)]
+    con.close()
 
 
 # ---------- Requêtes rejetées (le cœur du garde-fou) ----------
+
 
 @pytest.mark.parametrize(
     "sql",
@@ -61,6 +86,7 @@ def test_mot_cle_interdit_dans_cte_rejete():
 
 # ---------- Lecture du système de fichiers (audit M7) ----------
 
+
 @pytest.mark.parametrize(
     "sql",
     [
@@ -91,6 +117,7 @@ def test_acces_externe_coupe_au_niveau_moteur():
 
 # ---------- Allowlist de tables (couche Gold uniquement) ----------
 
+
 def test_table_hors_gold_rejetee():
     with pytest.raises(ValueError):
         valider_sql("SELECT * FROM silver_patient")
@@ -111,10 +138,64 @@ def test_jointure_implicite_virgule_rejetee():
 def test_jointure_implicite_gold_seules_acceptee():
     """Deux tables Gold jointes par virgule restent licites."""
     sql = "SELECT * FROM gold_cohorte_patient, gold_kpi_histologie"
-    assert valider_sql(sql) == sql
+    valide = _normalise(valider_sql(sql))
+    assert "gold_cohorte_patient" in valide and "gold_kpi_histologie" in valide
+
+
+# ---------- Non-régression audit 2026-07-20 (payloads B1/B2/B3 + variante) ----
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        # B1 : sous-requête dans FROM — le FROM interne doit être vu
+        "SELECT * FROM (SELECT * FROM silver_patient) t",
+        # B2 : identifiant entre guillemets doubles
+        'SELECT * FROM "silver_patient"',
+        # B3 : empoisonnement CTE via un littéral chaîne
+        "SELECT * FROM silver_patient WHERE 'silver_patient AS (' IS NOT NULL",
+        # Variante B1 : virgule après sous-requête (R1 originel)
+        "SELECT * FROM (SELECT * FROM gold_cohorte_patient) t, silver_patient",
+    ],
+)
+def test_payloads_audit_rejetes(sql):
+    """Les 4 exploits de l'audit du 2026-07-20 doivent être rejetés : le
+    parsing AST voit les tables réelles là où la regex ne les voyait pas."""
+    with pytest.raises(ValueError):
+        valider_sql(sql)
+
+
+def test_sous_requete_gold_legitime_acceptee():
+    """Faux positif de l'ancienne validation : une sous-requête 100 % Gold
+    doit passer."""
+    sql = "SELECT * FROM (SELECT patient_id, sexe FROM gold_cohorte_patient) t"
+    assert "gold_cohorte_patient" in _normalise(valider_sql(sql))
+
+
+def test_cte_avec_liste_de_colonnes_acceptee():
+    """Faux positif de l'ancienne validation : une CTE à liste de colonnes
+    « c(pid) AS (…) » doit être reconnue comme CTE."""
+    sql = "WITH c(pid) AS (SELECT patient_id FROM gold_cohorte_patient) SELECT * FROM c"
+    assert "gold_cohorte_patient" in _normalise(valider_sql(sql))
+
+
+# ---------- Borne de longueur de la question ----------
+
+
+def test_question_trop_longue_rejetee():
+    """Au-delà de MAX_QUESTION caractères : refus immédiat, avant tout appel
+    API ou ouverture de la base."""
+    with pytest.raises(ValueError, match="trop longue"):
+        repondre("x" * (MAX_QUESTION + 1))
+
+
+def test_question_vide_rejetee():
+    with pytest.raises(ValueError, match="vide"):
+        repondre("   ")
 
 
 # ---------- LIMIT forcé (sans casser le ORDER BY — régression R2) ----------
+
 
 def test_borner_ajoute_limit_sans_encapsuler():
     """R2 : on n'encapsule plus dans une sous-requête (qui perdait l'ordre) ;
@@ -150,6 +231,7 @@ def test_borner_preserve_ordre_a_l_execution():
 
 
 # ---------- Extraction JSON ----------
+
 
 def test_extraire_json_retire_balises_markdown():
     brut = '```json\n{"sql": "SELECT 1", "hypotheses": "", "non_couvert": ""}\n```'

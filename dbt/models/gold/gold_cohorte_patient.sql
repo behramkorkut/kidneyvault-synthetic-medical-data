@@ -35,7 +35,7 @@ suivi as (
         -- arg_min renvoie la localisation à la date la plus ancienne.
         arg_min(localisation_recidive, date_suivi)
             filter (where recidive) as localisation_premiere_recidive
-    from {{ ref('stg_suivi') }}
+    from {{ ref('silver_suivi') }}
     group by patient_id
 ),
 
@@ -45,7 +45,7 @@ traitement as (
         count(*)                  as n_lignes_traitement,
         max(ligne_traitement)     as ligne_max,
         bool_or(arret_pour_toxicite) as arret_toxicite
-    from {{ ref('stg_traitement_oncologie') }}
+    from {{ ref('silver_traitement_oncologie') }}
     group by patient_id
 )
 
@@ -82,7 +82,7 @@ select
     coalesce(t.arret_toxicite, false) as arret_pour_toxicite
 
 from {{ ref('silver_patient') }} as p
-left join {{ ref('stg_centre') }} as c_ref on p.centre_id = c_ref.centre_id
+left join {{ ref('silver_centre') }} as c_ref on p.centre_id = c_ref.centre_id
 left join chirurgie  as ch using (patient_id)
 left join anapath    as a  using (patient_id)
 left join suivi      as s  using (patient_id)
