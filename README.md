@@ -315,6 +315,25 @@ kidneyvault/
 - **Aucune donnée dans Git** : même synthétiques, les données restent hors du
   dépôt — la discipline attendue en environnement santé.
 
+## Audit indépendant
+
+Le projet a fait l'objet de **deux audits indépendants** (revue de code +
+**exécution réelle** : probes adversariaux sur l'agent et la couche qualité),
+suivis de correctifs vérifiés un à un. **Note finale : 9/10.**
+
+| Garantie | Vérifiée à l'exécution |
+|---|---|
+| Qualité mesurée : rappel/précision 100 % par type de défaut, contre la vérité terrain | ✅ évaluation rejouée |
+| 98 tests dbt + 78 pytest ; pipeline complet reconstruit en CI | ✅ mesurés |
+| Agent requêteur : allowlist par parsing SQL (sqlglot) — sous-requêtes, identifiants quotés, empoisonnement CTE rejetés ; moteur DuckDB read-only verrouillé | ✅ probes adversariaux |
+| Coût de la démo borné : 6 questions/jour/IP persistant (Postgres ou fichier local), question ≤ 500 caractères | ✅ probes (refus à la 7ᵉ) |
+| Génération déterministe (graines fixées), données jamais commitées | ✅ code + git |
+
+> Limites assumées et documentées : le quota fichier ne survit pas au réveil du
+> conteneur Streamlit Cloud ; la CI n'inclut pas encore mypy ni gate de
+> couverture ; l'orchestration Dagster et l'agent extracteur restent en feuille
+> de route.
+
 ## Feuille de route
 
 1. **Agent extracteur** : compte-rendu clinique en texte libre → JSON structuré
