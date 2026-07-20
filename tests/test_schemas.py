@@ -16,6 +16,7 @@ from kidneyvault.schemas import (
 
 # ---------- CentreSchema ----------
 
+
 def test_centre_valide_passe():
     """Un référentiel de centres bien formé doit être validé tel quel."""
     df = pl.DataFrame(
@@ -46,6 +47,7 @@ def test_centre_type_invalide_rejete():
 
 # ---------- PatientSchema (règle métier inter-colonnes) ----------
 
+
 def test_patient_valide_passe():
     """Patient cohérent : naissance < inclusion."""
     df = pl.DataFrame(
@@ -70,7 +72,7 @@ def test_patient_naissance_apres_inclusion_rejete():
             "patient_id": [1],
             "cle_uroccr": ["JEDU00001"],
             "centre_id": [1],
-            "date_naissance": [date(2020, 5, 1)],   # après inclusion !
+            "date_naissance": [date(2020, 5, 1)],  # après inclusion !
             "sexe": ["H"],
             "date_inclusion": [date(2015, 3, 10)],
             "statut_vital": ["vivant"],
@@ -100,6 +102,7 @@ def test_patient_dernieres_nouvelles_avant_inclusion_rejete():
 
 
 # ---------- SuiviSchema (cohérence récidive/localisation) ----------
+
 
 def test_suivi_localisation_sans_recidive_rejete():
     """Localisation de récidive renseignée alors que recidive=False : interdit."""

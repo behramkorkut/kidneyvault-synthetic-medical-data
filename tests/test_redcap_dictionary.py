@@ -48,7 +48,6 @@ def test_required_suit_nullabilite():
     idx = _index()
     assert idx[("patient", "patient_id")]["Required Field?"] == "y"
     assert idx[("patient", "date_dernieres_nouvelles")]["Required Field?"] == ""
-    
 
 
 def test_branching_logic_recidive():

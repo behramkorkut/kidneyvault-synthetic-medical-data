@@ -59,7 +59,9 @@ def test_verite_terrain_exhaustive(corrompu):
 def test_chirurgies_antidatees_effectives(propre, corrompu):
     """Les chirurgies ciblées sont réellement antérieures au bilan."""
     corrompues, vt = corrompu
-    ids = vt.filter(pl.col("defaut") == DEFAUT_CHIRURGIE_AVANT_EXAMEN)["id_ligne"].to_list()
+    ids = vt.filter(pl.col("defaut") == DEFAUT_CHIRURGIE_AVANT_EXAMEN)[
+        "id_ligne"
+    ].to_list()
     examen_ref = (
         propre["examen_pretherapeutique"]
         .group_by("patient_id")
@@ -78,7 +80,9 @@ def test_doublons_presents(propre, corrompu):
     """Les doublons ajoutent des lignes patient, avec clés uniques."""
     corrompues, _ = corrompu
     assert corrompues["patient"].height == propre["patient"].height + 2
-    assert corrompues["patient"]["cle_uroccr"].n_unique() == corrompues["patient"].height
+    assert (
+        corrompues["patient"]["cle_uroccr"].n_unique() == corrompues["patient"].height
+    )
 
 
 def test_contrats_aveugles_aux_defauts(corrompu):

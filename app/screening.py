@@ -42,6 +42,7 @@ st.page_link(
     use_container_width=True,
 )
 
+
 @st.cache_resource
 def _bootstrap() -> bool:
     """Construit le warehouse au premier démarrage (utile en déploiement)."""
@@ -70,8 +71,9 @@ histologies = st.sidebar.multiselect(
     options=sorted(cohorte["type_histologique"].drop_nulls().unique().to_list()),
 )
 
-age_min, age_max = int(cohorte["age_inclusion"].min()), int(
-    cohorte["age_inclusion"].max()
+age_min, age_max = (
+    int(cohorte["age_inclusion"].min()),
+    int(cohorte["age_inclusion"].max()),
 )
 age = st.sidebar.slider("Âge à l'inclusion", age_min, age_max, (age_min, age_max))
 
@@ -79,9 +81,7 @@ opere = st.sidebar.selectbox("Opéré ?", ["Indifférent", "Oui", "Non"])
 recidive = st.sidebar.selectbox("Récidive ?", ["Indifférent", "Oui", "Non"])
 
 # --- Application des filtres ---
-filtre = cohorte.filter(
-    pl.col("age_inclusion").is_between(age[0], age[1])
-)
+filtre = cohorte.filter(pl.col("age_inclusion").is_between(age[0], age[1]))
 if sexes:
     filtre = filtre.filter(pl.col("sexe").is_in(sexes))
 if types_centre:

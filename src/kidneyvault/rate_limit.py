@@ -12,8 +12,8 @@ pour une démo ; une vraie prod utiliserait un quota côté serveur (Redis, etc.
 
 from __future__ import annotations
 
-MAX_APPELS_SESSION = 15   # plafond d'appels API par session
-INTERVALLE_MIN_S = 5.0    # délai minimal entre deux appels
+MAX_APPELS_SESSION = 15  # plafond d'appels API par session
+INTERVALLE_MIN_S = 5.0  # délai minimal entre deux appels
 
 
 def etat_quota(

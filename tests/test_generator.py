@@ -24,6 +24,7 @@ def eds():
 
 # ---------- Reproductibilité ----------
 
+
 def test_reproductibilite():
     """Même graine => exactement les mêmes données."""
     eds1 = generer_eds(n_patients=30, n_centres=8, seed=123)
@@ -41,6 +42,7 @@ def test_volumes_attendus(eds):
 
 # ---------- Conformité aux schémas Pandera ----------
 
+
 def test_toutes_tables_conformes_pandera(eds):
     """Chaque table générée respecte son contrat Pandera."""
     CentreSchema.validate(eds["centre"])
@@ -54,6 +56,7 @@ def test_toutes_tables_conformes_pandera(eds):
 
 # ---------- Cohérence inter-tables ----------
 
+
 def test_anapath_implique_chirurgie(eds):
     """Toute anapath référence une chirurgie existante (intégrité référentielle)."""
     ids_chirurgie = set(eds["chirurgie"]["chirurgie_id"].to_list())
@@ -65,8 +68,11 @@ def test_integrite_referentielle_patient(eds):
     """Tous les patient_id des tables filles existent dans la table patient."""
     ids_patients = set(eds["patient"]["patient_id"].to_list())
     for table in [
-        "examen_pretherapeutique", "chirurgie", "anatomopathologie",
-        "suivi", "traitement_oncologie",
+        "examen_pretherapeutique",
+        "chirurgie",
+        "anatomopathologie",
+        "suivi",
+        "traitement_oncologie",
     ]:
         ids = set(eds[table]["patient_id"].to_list())
         assert ids.issubset(ids_patients), f"FK orpheline dans {table}"
@@ -75,9 +81,9 @@ def test_integrite_referentielle_patient(eds):
 def test_coherence_deces(eds):
     """Un statut 'Décédé' en suivi implique un patient décédé."""
     decedes_patient = set(
-        eds["patient"].filter(
-            eds["patient"]["statut_vital"] == "décédé"
-        )["patient_id"].to_list()
+        eds["patient"]
+        .filter(eds["patient"]["statut_vital"] == "décédé")["patient_id"]
+        .to_list()
     )
     decedes_suivi = set(
         eds["suivi"].filter(eds["suivi"]["statut"] == "Décédé")["patient_id"].to_list()
@@ -104,6 +110,7 @@ def test_traitement_reserve_aux_stades_avances():
 
 
 # ---------- Cohérence temporelle ----------
+
 
 def test_aucune_date_apres_extraction(eds):
     """Aucune date générée ne dépasse la date d'extraction simulée de l'EDS."""

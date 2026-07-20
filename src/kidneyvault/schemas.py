@@ -34,7 +34,6 @@ MOLECULES = ["Sunitinib", "Nivolumab", "Pembrolizumab", "Cabozantinib", "Axitini
 REPONSES_RECIST = ["Complète", "Partielle", "Stable", "Progression"]
 
 
-
 class CentreSchema(pa.DataFrameModel):
     """Référentiel des centres participant au réseau."""
 
@@ -53,7 +52,7 @@ class PatientSchema(pa.DataFrameModel):
 
     patient_id: int = pa.Field(unique=True, ge=1)
     cle_uroccr: str = pa.Field(unique=True)  # clé de pseudonymisation unique
-    centre_id: int = pa.Field(ge=1)          # FK → centre (intégrité vérifiée en dbt)
+    centre_id: int = pa.Field(ge=1)  # FK → centre (intégrité vérifiée en dbt)
     date_naissance: pl.Date = pa.Field(nullable=False)
     sexe: str = pa.Field(isin=SEXES)
     date_inclusion: pl.Date = pa.Field(nullable=False)

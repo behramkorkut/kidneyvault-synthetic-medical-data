@@ -63,9 +63,7 @@ def _corrompre_dates_chirurgie(
     for ligne in jointes.filter(pl.col("chirurgie_id").is_in(cibles)).iter_rows(
         named=True
     ):
-        nouvelle_date = ligne["date_examen_ref"] - timedelta(
-            days=rng.randint(30, 365)
-        )
+        nouvelle_date = ligne["date_examen_ref"] - timedelta(days=rng.randint(30, 365))
         remplacements.append(
             {"chirurgie_id": ligne["chirurgie_id"], "date_corrompue": nouvelle_date}
         )

@@ -49,6 +49,7 @@ STADES_POIDS = [0.70, 0.20, 0.10]
 # Génération du référentiel des centres
 # --------------------------------------------------------------------------
 
+
 def generer_centres(n_centres: int = 8) -> pl.DataFrame:
     """Génère la table `centre` à partir du référentiel prédéfini.
 
@@ -68,6 +69,7 @@ def generer_centres(n_centres: int = 8) -> pl.DataFrame:
 # --------------------------------------------------------------------------
 # Génération des patients
 # --------------------------------------------------------------------------
+
 
 def _cle_uroccr(faker: Faker, numero: int) -> str:
     """Reproduit le format de clé de pseudonymisation UroCCR :
@@ -109,7 +111,11 @@ def generer_patients(
         stade = rng.choices(STADES, weights=STADES_POIDS, k=1)[0]
 
         # Statut vital : plus de décès chez les métastatiques
-        proba_deces = {"localise": 0.05, "localement_avance": 0.20, "metastatique": 0.55}
+        proba_deces = {
+            "localise": 0.05,
+            "localement_avance": 0.20,
+            "metastatique": 0.55,
+        }
         decede = rng.random() < proba_deces[stade]
         statut_vital = "décédé" if decede else "vivant"
 
@@ -138,6 +144,7 @@ def generer_patients(
 # --------------------------------------------------------------------------
 # Fonctions d'aide cliniques (une règle métier = une fonction testable)
 # --------------------------------------------------------------------------
+
 
 def _tirer_taille_cT(stade: str, rng: random.Random) -> tuple[int, str]:
     """Tire une taille tumorale (mm) cohérente avec le stade, et le cT associé.
@@ -206,8 +213,11 @@ def _tirer_histologie_grade(rng: random.Random) -> tuple[str, int | None]:
 def _ct_vers_pt(cT: str, rng: random.Random) -> str:
     """Le pT (pathologique) est souvent proche du cT (clinique), parfois recalé."""
     correspondance = {
-        "cT1a": "pT1a", "cT1b": "pT1b", "cT2": "pT2",
-        "cT3": "pT3", "cT4": "pT4",
+        "cT1a": "pT1a",
+        "cT1b": "pT1b",
+        "cT2": "pT2",
+        "cT3": "pT3",
+        "cT4": "pT4",
     }
     pt = correspondance.get(cT, "pT1a")
     # 15% de discordance clinico-pathologique (réaliste)
@@ -220,8 +230,10 @@ def _ct_vers_pt(cT: str, rng: random.Random) -> str:
 # Génération des entités cliniques (par patient)
 # --------------------------------------------------------------------------
 
-def _date_apres(date_ref: date, jours_min: int, jours_max: int,
-                rng: random.Random) -> date:
+
+def _date_apres(
+    date_ref: date, jours_min: int, jours_max: int, rng: random.Random
+) -> date:
     """Tire une date située entre jours_min et jours_max après une date de référence."""
     return date_ref + timedelta(days=rng.randint(jours_min, jours_max))
 
@@ -308,7 +320,9 @@ def generer_parcours_clinique(
                     "grade_isup": grade,
                     "taille_tumorale_mm": taille_piece,
                     "pT": _ct_vers_pt(cT, rng),
-                    "pN": rng.choices(["pN0", "pN1", "pNx"], weights=[0.8, 0.1, 0.1])[0],
+                    "pN": rng.choices(["pN0", "pN1", "pNx"], weights=[0.8, 0.1, 0.1])[
+                        0
+                    ],
                     "marges_chirurgicales": rng.choices(
                         ["Négatives", "Positives"], weights=[0.9, 0.1]
                     )[0],
@@ -362,7 +376,6 @@ def _nb_suivis(stade: str, rng: random.Random) -> int:
 def _proba_recidive(stade: str) -> float:
     """Probabilité de récidive par consultation selon le stade."""
     return {"localise": 0.05, "localement_avance": 0.20, "metastatique": 0.45}[stade]
-
 
 
 def generer_suivi_et_oncologie(
@@ -482,6 +495,7 @@ def generer_suivi_et_oncologie(
 # Orchestration : génère l'EDS complet (7 tables)
 # --------------------------------------------------------------------------
 
+
 def generer_eds(
     n_patients: int = 50,
     n_centres: int = 8,
@@ -522,4 +536,3 @@ def generer_eds(
         "suivi": longi["suivi"],
         "traitement_oncologie": longi["traitement"],
     }
-

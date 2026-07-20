@@ -50,17 +50,23 @@ COLONNES_REDCAP = [
 
 # Formulaires (instruments) REDCap = tables. Patient en premier : son identifiant
 # fait office de record-id REDCap.
-FORMULAIRES = OrderedDict([
-    ("patient", (schemas.PatientSchema, "Patient (entité pivot)")),
-    ("examen_pretherapeutique",
-     (schemas.ExamenPretherapeutiqueSchema, "Bilan pré-thérapeutique")),
-    ("chirurgie", (schemas.ChirurgieSchema, "Chirurgie")),
-    ("anatomopathologie", (schemas.AnatomopathologieSchema, "Anatomopathologie")),
-    ("suivi", (schemas.SuiviSchema, "Suivi longitudinal")),
-    ("traitement_oncologie",
-     (schemas.TraitementOncologieSchema, "Traitement oncologique")),
-    ("centre", (schemas.CentreSchema, "Référentiel des centres")),
-])
+FORMULAIRES = OrderedDict(
+    [
+        ("patient", (schemas.PatientSchema, "Patient (entité pivot)")),
+        (
+            "examen_pretherapeutique",
+            (schemas.ExamenPretherapeutiqueSchema, "Bilan pré-thérapeutique"),
+        ),
+        ("chirurgie", (schemas.ChirurgieSchema, "Chirurgie")),
+        ("anatomopathologie", (schemas.AnatomopathologieSchema, "Anatomopathologie")),
+        ("suivi", (schemas.SuiviSchema, "Suivi longitudinal")),
+        (
+            "traitement_oncologie",
+            (schemas.TraitementOncologieSchema, "Traitement oncologique"),
+        ),
+        ("centre", (schemas.CentreSchema, "Référentiel des centres")),
+    ]
+)
 
 # Colonnes directement ré-identifiantes (Identifier? = y).
 IDENTIFIANTS = {"cle_uroccr"}
@@ -79,6 +85,7 @@ LIBELLES = {
     "taille_tumorale_mm": "Taille tumorale sur pièce (mm)",
 }
 
+
 def _code(valeurs, cible) -> int:
     """Code REDCap (1-based) d'une valeur dans son énumération."""
     return list(valeurs).index(cible) + 1
@@ -94,8 +101,10 @@ BRANCHEMENTS = {
     # localisation_recidive visible seulement si récidive (yesno : oui = 1)
     ("suivi", "localisation_recidive"): "[recidive] = '1'",
     # grade ISUP non applicable au chromophobe -> champ masqué dans ce cas
-    ("anatomopathologie", "grade_isup"):
-        f"[type_histologique] <> '{_CODE_CHROMOPHOBE}'",
+    (
+        "anatomopathologie",
+        "grade_isup",
+    ): f"[type_histologique] <> '{_CODE_CHROMOPHOBE}'",
 }
 
 
@@ -166,7 +175,9 @@ def _champ(nom, formulaire, colonne, section) -> dict:
         "Text Validation Min": vmin,
         "Text Validation Max": vmax,
         "Identifier?": identifiant,
-        "Branching Logic (Show field only if...)": BRANCHEMENTS.get((formulaire, nom.lower()), ""),
+        "Branching Logic (Show field only if...)": BRANCHEMENTS.get(
+            (formulaire, nom.lower()), ""
+        ),
         "Required Field?": requis,
         "Custom Alignment": "",
         "Question Number (surveys only)": "",
@@ -204,8 +215,10 @@ def main() -> None:
     lignes = construire_dictionnaire()
     chemin = ecrire_csv(lignes)
     n_forms = len({row["Form Name"] for row in lignes})
-    print(f"Data Dictionary REDCap généré : {len(lignes)} champs, "
-          f"{n_forms} formulaires → {chemin}")
+    print(
+        f"Data Dictionary REDCap généré : {len(lignes)} champs, "
+        f"{n_forms} formulaires → {chemin}"
+    )
 
 
 if __name__ == "__main__":

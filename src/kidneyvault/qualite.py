@@ -50,6 +50,7 @@ def executer_controles(
         anomalies.append(resultat.cast(_COLONNES_ANOMALIES))
     return pl.concat(anomalies)
 
+
 def executer_indicateurs(
     con: duckdb.DuckDBPyConnection,
     dossier: str | Path = DOSSIER_INDICATEURS,
@@ -75,8 +76,6 @@ def main() -> None:
     for nom, resultat in executer_indicateurs(con).items():
         print(f"\nIndicateur : {nom}")
         print(resultat)
-
-
 
 
 if __name__ == "__main__":
