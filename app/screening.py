@@ -43,17 +43,12 @@ st.page_link(
 )
 
 
-@st.cache_resource
-def _bootstrap() -> bool:
-    """Construit le warehouse au premier démarrage (utile en déploiement)."""
-    from kidneyvault.bootstrap import ensure_warehouse
+from kidneyvault.amorcage_ui import amorcer  # noqa: E402
 
-    ensure_warehouse(REPO_ROOT)
-    return True
-
-
-with st.spinner("Préparation de l'entrepôt (jusqu'à ~30 s au 1er lancement)…"):
-    _bootstrap()
+# Point d'amorçage partagé par toutes les pages (un seul verrou de cache) :
+# construit l'entrepôt si besoin, le répare s'il a été laissé incohérent par
+# une mise en veille, et propose une reconstruction plutôt qu'un crash.
+amorcer(REPO_ROOT)
 
 cohorte = charger_cohorte()
 

@@ -23,7 +23,10 @@ transformations dbt (Medallion) → screening de cohortes et pilotage décisionn
 Screening de cohortes, tableaux de bord, et surtout le **requêteur en langage
 naturel** (agent IA) : posez une question en français, l'agent la traduit en SQL
 gouverné (lecture seule, validé, affiché). L'app **s'auto-amorce** au premier
-chargement — elle construit elle-même tout son pipeline (~1 min).
+chargement — elle construit elle-même tout son pipeline (~1 min) — et
+**s'auto-répare** au réveil de veille : si l'hébergeur a laissé l'entrepôt dans
+un état incohérent (WAL orphelin, fichier verrouillé), la base est purgée et
+reconstruite au lieu de faire échouer le démarrage.
 
 ---
 

@@ -103,14 +103,30 @@ def _consommer_local(
     chemin: Path, ip: str, jour: date, max_jour: int
 ) -> tuple[bool, str]:
     """Compteur dans un fichier DuckDB local : persistant au-delà des sessions
-    Streamlit (une connexion courte par appel, pas de verrou durable)."""
+    Streamlit (une connexion courte par appel, pas de verrou durable).
+
+    Auto-réparant : une mise en veille du conteneur peut laisser le fichier
+    inexploitable (WAL orphelin). On le recrée alors plutôt que de faire
+    tomber la page — le budget reparti de zéro est un moindre mal.
+    """
     chemin.parent.mkdir(parents=True, exist_ok=True)
-    con = duckdb.connect(str(chemin))
-    try:
-        con.execute(_DDL.format(table="quota_ip"))
-        return _incrementer(con, "quota_ip", ip, jour, max_jour)
-    finally:
-        con.close()
+    for tentative in (1, 2):
+        try:
+            con = duckdb.connect(str(chemin))
+            try:
+                con.execute(_DDL.format(table="quota_ip"))
+                return _incrementer(con, "quota_ip", ip, jour, max_jour)
+            finally:
+                con.close()
+        except duckdb.Error:
+            if tentative == 2:
+                raise
+            logger.warning(
+                "Fichier de quota inexploitable : recréation.", exc_info=True
+            )
+            chemin.unlink(missing_ok=True)
+            Path(f"{chemin}.wal").unlink(missing_ok=True)
+    raise RuntimeError("Quota local : échec inattendu.")  # pragma: no cover
 
 
 def consommer(

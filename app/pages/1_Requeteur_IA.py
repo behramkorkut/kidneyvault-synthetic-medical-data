@@ -34,17 +34,11 @@ except Exception:
     pass
 
 
-@st.cache_resource
-def _bootstrap() -> bool:
-    """Construit le warehouse au premier démarrage (utile en déploiement)."""
-    from kidneyvault.bootstrap import ensure_warehouse
+from kidneyvault.amorcage_ui import amorcer  # noqa: E402
 
-    ensure_warehouse(REPO_ROOT)
-    return True
-
-
-with st.spinner("Préparation de l'entrepôt (jusqu'à ~30 s au 1er lancement)…"):
-    _bootstrap()
+# Même point d'amorçage que la page de screening : une seule entrée de cache,
+# donc jamais deux `dbt run` concurrents sur le même fichier DuckDB.
+amorcer(REPO_ROOT)
 
 # L'agent a besoin de la clé API (extra « agent »). On échoue proprement sinon.
 if not os.environ.get("ANTHROPIC_API_KEY"):
